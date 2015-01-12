@@ -115,7 +115,7 @@ CGSize NISizeOfAttributedStringConstrainedToSize(NSAttributedString* attributedS
 
 @property (nonatomic, copy) NSString *string;
 @property (nonatomic, assign) NSTextCheckingTypes dataDetectorTypes;
-@property (nonatomic, copy) void (^complete)(NSArray *matches);
+@property (nonatomic, copy) void (^completion)(NSArray *matches);
 
 @end
 
@@ -126,7 +126,7 @@ CGSize NISizeOfAttributedStringConstrainedToSize(NSAttributedString* attributedS
     NSArray* matches = [self _matchesFromAttributedString:self.string];
     
     if (![self isCancelled]) {
-        self.complete(matches);
+        self.completion(matches);
     }
 }
 
@@ -611,7 +611,7 @@ CGSize NISizeOfAttributedStringConstrainedToSize(NSAttributedString* attributedS
         self.detectLinksOperation.dataDetectorTypes = self.dataDetectorTypes;
         __weak NIAttributedLabel *weakSelf = self;
         
-        self.detectLinksOperation.complete = ^(NSArray *matches){
+        self.detectLinksOperation.completion = ^(NSArray *matches){
             [[NSOperationQueue mainQueue] addOperationWithBlock:^{
                 if (![weakSelf.detectLinksOperation isCancelled] && reference == weakSelf.text) {
                     weakSelf.detectedlinkLocations = matches;
