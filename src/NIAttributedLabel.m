@@ -111,6 +111,52 @@ CGSize NISizeOfAttributedStringConstrainedToSize(NSAttributedString* attributedS
 
 @end
 
+@interface NIDetectLinksOperation : NSOperation
+
+@property (nonatomic, copy) NSString *string;
+@property (nonatomic, assign) NSTextCheckingTypes dataDetectorTypes;
+@property (nonatomic, copy) void (^completion)(NSArray *matches);
+
+@end
+
+@implementation NIDetectLinksOperation
+
+- (void)main
+{
+    NSArray* matches = [self _matchesFromAttributedString:self.string];
+    
+    if (![self isCancelled]) {
+        self.completion(matches);
+    }
+}
+
+- (void)cancel
+{
+    [super cancel];
+}
+
+- (NSArray *)_matchesFromAttributedString:(NSString *)string
+{
+    NSError* error = nil;
+    NSDataDetector* linkDetector = [NSDataDetector dataDetectorWithTypes:(NSTextCheckingTypes)self.dataDetectorTypes
+                                                                   error:&error];
+    NSRange range = NSMakeRange(0, string.length);
+    
+    NSMutableArray *results = [NSMutableArray new];
+    
+    [linkDetector enumerateMatchesInString:string options:0 range:range usingBlock:^(NSTextCheckingResult *result, NSMatchingFlags flags, BOOL *stop) {
+        if ([self isCancelled]) {
+            *stop = YES;
+        }
+        
+        [results addObject:result];
+    }];
+    
+    return results;
+}
+
+@end
+
 @interface NIAttributedLabel() <UIActionSheetDelegate>
 
 @property (nonatomic, strong) NSMutableAttributedString* mutableAttributedString;
@@ -121,6 +167,8 @@ CGSize NISizeOfAttributedStringConstrainedToSize(NSAttributedString* attributedS
 @property (nonatomic)         BOOL linksHaveBeenDetected;
 @property (nonatomic, copy)   NSArray*        detectedlinkLocations;
 @property (nonatomic, strong) NSMutableArray* explicitLinkLocations;
+@property (nonatomic, strong) NSOperationQueue *detectLinksOperationQueue;
+@property (nonatomic, strong) NIDetectLinksOperation *detectLinksOperation;
 
 @property (nonatomic, strong) NSTextCheckingResult* originalLink;
 @property (nonatomic, strong) NSTextCheckingResult* touchedLink;
@@ -156,6 +204,18 @@ CGSize NISizeOfAttributedStringConstrainedToSize(NSAttributedString* attributedS
   if (NULL != _textFrame) {
     CFRelease(_textFrame);
   }
+}
+
+- (NSOperationQueue *)detectLinksOperationQueue
+{
+    static dispatch_once_t p = 0;
+    __strong static id _sharedOperationQueue = nil;
+    
+    dispatch_once(&p, ^{
+        _sharedOperationQueue = [NSOperationQueue new];
+    });
+    
+    return _sharedOperationQueue;
 }
 
 - (CTFrameRef)textFrame {
@@ -272,6 +332,8 @@ CGSize NISizeOfAttributedStringConstrainedToSize(NSAttributedString* attributedS
 
     // Clear the link caches.
     self.detectedlinkLocations = nil;
+    [self.detectLinksOperation cancel];
+      
     self.linksHaveBeenDetected = NO;
     [self removeAllExplicitLinks];
 
@@ -533,31 +595,40 @@ CGSize NISizeOfAttributedStringConstrainedToSize(NSAttributedString* attributedS
 }
 
 - (NSArray *)_matchesFromAttributedString:(NSString *)string {
-  NSError* error = nil;
-  NSDataDetector* linkDetector = [NSDataDetector dataDetectorWithTypes:(NSTextCheckingTypes)self.dataDetectorTypes
-                                                                 error:&error];
-  NSRange range = NSMakeRange(0, string.length);
-
-  return [linkDetector matchesInString:string options:0 range:range];
+    NSError* error = nil;
+    NSDataDetector* linkDetector = [NSDataDetector dataDetectorWithTypes:(NSTextCheckingTypes)self.dataDetectorTypes
+                                                                   error:&error];
+    NSRange range = NSMakeRange(0, string.length);
+    
+    return [linkDetector matchesInString:string options:0 range:range];
 }
 
-- (void)_deferLinkDetection {
-  if (!self.detectingLinks) {
-    self.detectingLinks = YES;
-
-    NSString* string = [self.mutableAttributedString.string copy];
-    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-      NSArray* matches = [self _matchesFromAttributedString:string];
-      self.detectingLinks = NO;
-
-      dispatch_async(dispatch_get_main_queue(), ^{
-        self.detectedlinkLocations = matches;
-        self.linksHaveBeenDetected = YES;
-
-        [self attributedTextDidChange];
-      });
-    });
-  }
+- (void)_deferLinkDetection
+{
+    if (!self.detectingLinks) {
+        self.detectingLinks = YES;
+        
+        if (self.detectLinksOperation && [self.detectLinksOperation isExecuting]) {
+            [self.detectLinksOperation cancel];
+        }
+        
+        self.detectLinksOperation = [NIDetectLinksOperation new];
+        self.detectLinksOperation.string = [self.mutableAttributedString.string copy];
+        self.detectLinksOperation.dataDetectorTypes = self.dataDetectorTypes;
+        __weak NIAttributedLabel *weakSelf = self;
+        
+        self.detectLinksOperation.completion = ^(NSArray *matches){
+            dispatch_sync(dispatch_get_main_queue(), ^{
+                weakSelf.detectedlinkLocations = matches;
+                weakSelf.linksHaveBeenDetected = YES;
+                weakSelf.detectLinksOperation = nil;
+                [weakSelf attributedTextDidChange];
+            });
+        };
+        
+        [self.detectLinksOperationQueue addOperation:self.detectLinksOperation];
+        self.detectingLinks = NO;
+    }
 }
 
 // Use an NSDataDetector to find any implicit links in the text. The results are cached until
