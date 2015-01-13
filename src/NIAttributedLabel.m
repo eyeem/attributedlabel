@@ -206,6 +206,18 @@ CGSize NISizeOfAttributedStringConstrainedToSize(NSAttributedString* attributedS
   }
 }
 
+- (NSOperationQueue *)detectLinksOperationQueue
+{
+    static dispatch_once_t p = 0;
+    __strong static id _sharedOperationQueue = nil;
+    
+    dispatch_once(&p, ^{
+        _sharedOperationQueue = [NSOperationQueue new];
+    });
+    
+    return _sharedOperationQueue;
+}
+
 - (CTFrameRef)textFrame {
   if (NULL == _textFrame) {
     NSMutableAttributedString* attributedStringWithLinks = [self mutableAttributedStringWithAdditions];
@@ -320,6 +332,8 @@ CGSize NISizeOfAttributedStringConstrainedToSize(NSAttributedString* attributedS
 
     // Clear the link caches.
     self.detectedlinkLocations = nil;
+    [self.detectLinksOperation cancel];
+      
     self.linksHaveBeenDetected = NO;
     [self removeAllExplicitLinks];
 
@@ -594,31 +608,22 @@ CGSize NISizeOfAttributedStringConstrainedToSize(NSAttributedString* attributedS
     if (!self.detectingLinks) {
         self.detectingLinks = YES;
         
-        id reference = self.text;
-        
-        NSString* string = [self.mutableAttributedString.string copy];
-
-        if (!self.detectLinksOperationQueue) {
-            self.detectLinksOperationQueue = [NSOperationQueue new];
-        }
-        
         if (self.detectLinksOperation && [self.detectLinksOperation isExecuting]) {
             [self.detectLinksOperation cancel];
         }
         
         self.detectLinksOperation = [NIDetectLinksOperation new];
-        self.detectLinksOperation.string = string;
+        self.detectLinksOperation.string = [self.mutableAttributedString.string copy];
         self.detectLinksOperation.dataDetectorTypes = self.dataDetectorTypes;
         __weak NIAttributedLabel *weakSelf = self;
         
         self.detectLinksOperation.completion = ^(NSArray *matches){
-            [[NSOperationQueue mainQueue] addOperationWithBlock:^{
-                if (![weakSelf.detectLinksOperation isCancelled] && reference == weakSelf.text) {
-                    weakSelf.detectedlinkLocations = matches;
-                    weakSelf.linksHaveBeenDetected = YES;
-                    [weakSelf attributedTextDidChange];
-                }
-            }];
+            dispatch_sync(dispatch_get_main_queue(), ^{
+                weakSelf.detectedlinkLocations = matches;
+                weakSelf.linksHaveBeenDetected = YES;
+                weakSelf.detectLinksOperation = nil;
+                [weakSelf attributedTextDidChange];
+            });
         };
         
         [self.detectLinksOperationQueue addOperation:self.detectLinksOperation];
