@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name         = "NimbusKit-AttributedLabel"
-  s.version      = "1.0.0"
+  s.version      = "1.0.1e"
   s.license      =  { :type => 'BSD' }
   s.summary      = "UILabel subsitute with Core Text rendering, link detection, and inline images."
   s.description  = <<-DESC
@@ -11,7 +11,7 @@ Pod::Spec.new do |s|
   s.social_media_url = "http://twitter.com/featherless"
   s.requires_arc = true
   s.platform = :ios, '6.0'
-  s.source       = { :git => "https://github.com/nimbuskit/attributedlabel.git", :tag => "1.0.0" }
+  s.source       = { :git => "https://github.com/nimbuskit/attributedlabel.git", :tag => "1.0.1e" }
   s.source_files  = 'src'
   s.public_header_files = 'src/{NimbusKitAttributedLabel,NIAttributedLabel}.h'
   s.frameworks = 'CoreText', 'CoreGraphics', 'QuartzCore'
