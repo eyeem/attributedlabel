@@ -144,7 +144,7 @@ extern NSString* const NIAttributedLabelLinkAttributeName; // Value is an NSText
  * @returns YES if @c actionSheet should be displayed. NO if @c actionSheet should not be
  *               displayed.
  */
-- (BOOL)attributedLabel:(NIAttributedLabel *)attributedLabel shouldPresentActionSheet:(UIActionSheet *)actionSheet withTextCheckingResult:(NSTextCheckingResult *)result atPoint:(CGPoint)point;
+- (BOOL)attributedLabel:(NIAttributedLabel *)attributedLabel shouldPresentActionSheet:(id)actionSheet withTextCheckingResult:(NSTextCheckingResult *)result atPoint:(CGPoint)point;
 
 @end
 
